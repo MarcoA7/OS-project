@@ -26,8 +26,8 @@
 #endif
 sem_t mutex;
 
-struct mesg_buffer { 
-    long mesg_type; 
+struct msg_s { 
+    long type; 
     struct student whoAmI; 
 } message; 
 
@@ -124,7 +124,7 @@ int main(int argc, char const *argv[])
     /* Start simulation */
     printf("Start looking for collegues\n");
     alarm(SIM_TIME);
-
+    /*
     msgid = msgget(mySelf->matricola, 0666 | IPC_CREAT); 
     message.mesg_type = 1;
 
@@ -138,5 +138,11 @@ int main(int argc, char const *argv[])
     while(1) {
          msgrcv(msgid, &message, sizeof(message), 1, 0);
     }
+    */
+   shmctl(m_id, IPC_RMID, NULL);
+   printf("my mat is %d my grade is: %d my nof_ele is: %d my max ref is: %d my nof_invites is: %d\n", mySelf->matricola,
+   mySelf->voto_AdE, mySelf->nof_elems, mySelf->max_reject, mySelf->nof_invites);
+
+   shmctl(m_id, IPC_RMID, NULL);
     return 0;
 }
