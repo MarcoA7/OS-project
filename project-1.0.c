@@ -8,6 +8,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/msg.h>
 #include "student.h"
 #include "utility.h"
 
@@ -27,7 +28,7 @@ sem_t mutex;
 
 struct mesg_buffer { 
     long mesg_type; 
-    student whoAmI; 
+    struct student whoAmI; 
 } message; 
 
 int main(int argc, char const *argv[])
@@ -37,12 +38,12 @@ int main(int argc, char const *argv[])
     int msgid;
     pid_t *all_student, student_id;
     FILE* config;
-    student mySelf;
+    struct student* mySelf;
     
     // it has to become a shared variable
     MatrixF publicBoard;
 
-    #if POSIX(1)
+    #if POSIX(0)
     int shm_fd;
 	void *ptr;
     int shared_seg_size = (sizeof(MatrixF));
@@ -127,8 +128,8 @@ int main(int argc, char const *argv[])
     msgid = msgget(mySelf->matricola, 0666 | IPC_CREAT); 
     message.mesg_type = 1;
 
-    message.whoAmI->matricola = mySelf->matricola;
-    message.whoAmI->voto_AdE = mySelf->voto_AdE;
+    message.whoAmI.matricola = mySelf->matricola;
+    message.whoAmI.voto_AdE = mySelf->voto_AdE;
 
     for(int i = 0; i < mySelf->nof_invites; i++) {
         msgsnd(msgid, &message, sizeof(message), 0); 
