@@ -24,7 +24,7 @@
 #ifndef SIM_TIME
 #define SIM_TIME 3
 #endif
-sem_t mutex;
+sem_t *mutex;
 
 struct msg_s { 
     long type; 
@@ -40,6 +40,10 @@ int main(int argc, char const *argv[])
     FILE* config;
     struct student* mySelf;
     
+    //initialization of the semaphore
+    mutex = sem_open("accessing the board", O_CREAT, 1);
+    sem_unlink("accessing the board");
+
     // it has to become a shared variable
     MatrixF publicBoard;
 
@@ -100,7 +104,7 @@ int main(int argc, char const *argv[])
                 mySelf->voto_AdE = randomValue(18, 30);
                 mySelf->nof_invites = publicBoard->data[POS_NOF_INVITES][0];
                 mySelf->max_reject = publicBoard->data[POS_MAX_REJECTS][0];
-                sem_wait(&mutex);
+                sem_wait(mutex);
                 //the semaphore turns red.
                 /* critical section */
                 for(int i = 0; i < NUMBER_OF_COMPOSITION; i++)
@@ -109,7 +113,7 @@ int main(int argc, char const *argv[])
                         publicBoard->data[i][1]--;
                     }
                 //the semaphore turn green.
-                sem_post(&mutex);
+                sem_post(mutex);
                 i = POP_SIZE;
                 break;
             default:
