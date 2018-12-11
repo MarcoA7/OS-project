@@ -1,7 +1,7 @@
 /* COMPILE AS
 * gcc -o project-oSuse project-oSuse.c -lm -pthread
 */
-
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -57,7 +57,7 @@ struct msg_s {
 } message;
 
 int randomValue(int seed, int lower_bound, int upper_bound);
-
+void handler(int signum);
 
 int main(int argc, char const *argv[])
 {   
@@ -162,3 +162,6 @@ int randomValue(int seed, int lower_bound, int upper_bound) {
     int r = rand() % (upper_bound - lower_bound + 1) + lower_bound;
     return r;
 }
+
+void handler(int signum) {
+  /*signal (SIGUSR1, handler)*/;}
