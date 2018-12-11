@@ -14,45 +14,51 @@
 #include <sys/mman.h>
 #include <sys/msg.h>
 
+#define GETPID printf("%d\n", getpid())
+#define GETPPID printf("%d\n", getppid())
+
 sig_atomic_t sigusr1_count = 0;
 void handle(int signum);
-struct c {
-    int counter;
-};
 
 int main(int argc, char const *argv[])
 {   
-    struct c *cc;
+    int c;
     //pid_t pid = fork();
     sem_t *sem, *t;
-    int m_id;
-    m_id = shmget(IPC_PRIVATE, sizeof(*cc), 0600);
-    cc = shmat(m_id, NULL, 0);
-    cc->counter =0;
     sem = sem_open("/test", O_CREAT,  0644, 1);
-    t = sem_open("/dio", O_CREAT,  0644, -1);
+    t = sem_open("/dio", O_CREAT,  0644, 2);
     signal(SIGUSR1, handle);
-
+    int fd[2];
+    pipe(fd);
     pid_t all_child[5], pid;
     for(int i = 0 ; i < 5; i++)
-        switch(pid = fork()) {
-            case 0:
-                sem_wait(sem);
-                printf("ready %d son of %d\n", getpid(), getppid());
-                cc->counter++;
-                printf("i'm %d cc is %d", getpid(), cc->counter);
-                sem_post(sem);
-                sem_wait(t);
-                printf("ok %d\n",getpid());
+        switch(all_child[i] = fork()) {case 0: {
+                if(i!=0) {
+                    close(fd[0]); // close unused READ end
+                    printf("OK\n");       // do some work                       
+                    close(fd[1]); // close WRITE end, the last child
+                                  // to close will cause the read()
+                                  // of first child to unblock
+                }
+                if(i==0) { // first child    
+                    close(fd[1]); // close unused WRITE end
+                    // do some work                       
+                    char x = 0;
+                    fprintf(stderr, "1st Child's wait started %d\n",
+                        getpid());
+                    read(fd[0], &x, 1); // blocking call, until all
+                                        // siblings close the WRITE
+                                        // end
+                    fprintf(stderr, "1st Child's wait over %d\n",
+                        getpid());
+                    close(fd[0]); // close READ  end
+                }       
+                fprintf(stderr, "Child %d ready\n", getpid());            
+                exit(0);
                 break;
-            default:
-                while(cc->counter != 5) {sleep(1);printf("%d\n", cc->counter);}
-                    if(cc->counter == 5)
-                        for(int i = 0; i < 5; i++) sem_post(t);
-                all_child[i] = pid;
-                break;
+            }
         }
-                
+    close(fd[1]);      
                     /* code */
     return 0;
 }
