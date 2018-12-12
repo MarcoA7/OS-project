@@ -31,8 +31,11 @@ struct msg_s {
     struct student whoAmI; 
 } message; 
 
+int randomValue(int seed, int lower_bound, int upper_bound);
+
 int main(int argc, char const *argv[])
 {
+    SET_UP_SYNC_MECH;
     int status;
     int sum; //total of all students
     int msgid;
@@ -41,13 +44,13 @@ int main(int argc, char const *argv[])
     struct student* mySelf;
     
     //initialization of the semaphore
-    mutex = sem_open("accessing the board", O_CREAT, 1);
-    sem_unlink("accessing the board");
+    mutex = sem_open("accessing the board", O_CREAT, 0644, 1);
+    //sem_unlink("accessing the board");
 
     // it has to become a shared variable
     MatrixF publicBoard;
 
-    #if POSIX(0)
+    #if POSIX(1)
     int shm_fd;
 	void *ptr;
     int shared_seg_size = (sizeof(MatrixF));
@@ -70,7 +73,6 @@ int main(int argc, char const *argv[])
         printf("error In mmap()\n");
         exit(1);
     }
-    printf("TEST\n");
     #else
     int m_id = shmget(IPC_PRIVATE, sizeof(*publicBoard), 0600);
     publicBoard = shmat(m_id, NULL, 0);
@@ -100,21 +102,31 @@ int main(int argc, char const *argv[])
             case 0:
                     /* student init */
                 mySelf = malloc(sizeof(*mySelf));
-                mySelf->matricola = randomValue(0, 900000);
-                mySelf->voto_AdE = randomValue(18, 30);
+                mySelf->matricola = randomValue(i, 0, 900000);
+                mySelf->voto_AdE = randomValue(i, 18, 30);
                 mySelf->nof_invites = publicBoard->data[POS_NOF_INVITES][0];
                 mySelf->max_reject = publicBoard->data[POS_MAX_REJECTS][0];
                 sem_wait(mutex);
                 //the semaphore turns red.
                 /* critical section */
-                for(int i = 0; i < NUMBER_OF_COMPOSITION; i++)
-                    if(publicBoard->data[i][1] > 0) {
-                        mySelf->nof_elems = publicBoard->data[i][0];
-                        publicBoard->data[i][1]--;
+                if(publicBoard->data[0][1] > 0) {
+                        mySelf->nof_elems = publicBoard->data[0][0];
+                        publicBoard->data[0][1]--;
+                    }
+                    else if(publicBoard->data[1][1] > 0) {
+                        mySelf->nof_elems = publicBoard->data[1][0];
+                        publicBoard->data[1][1]--;
+                    }
+                    else {
+                        mySelf->nof_elems = publicBoard->data[2][0];
+                        publicBoard->data[2][1]--;
                     }
                 //the semaphore turn green.
                 sem_post(mutex);
-                i = POP_SIZE;
+
+                fprintf(stderr, "ready %d grades are %d max invites are: %d max rejects are: %d my team will have: %d people. My teacher is %d\n",mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
+                WAITING_EVERYONE;
+                exit(0);
                 break;
             default:
                 /* teacher init*/
@@ -123,11 +135,15 @@ int main(int argc, char const *argv[])
         }
     }
     /* waiting other student to end the creation */
-
-    
+    READY_SET_GO;
+    /* OK everyone is ready time is starting... NOW */
     /* Start simulation */
     printf("Start looking for collegues\n");
     alarm(SIM_TIME);
+    int corpse;
+    //int status;
+    while ((corpse = wait(&status)) > 0)
+    printf("%d: child %d exited with status 0x%.4X\n", (int)getpid(), corpse, status);
     /*
     msgid = msgget(mySelf->matricola, 0666 | IPC_CREAT); 
     message.mesg_type = 1;
@@ -143,10 +159,15 @@ int main(int argc, char const *argv[])
          msgrcv(msgid, &message, sizeof(message), 1, 0);
     }
     */
-   shmctl(m_id, IPC_RMID, NULL);
+   //shmctl(m_id, IPC_RMID, NULL);
    printf("my mat is %d my grade is: %d my nof_ele is: %d my max ref is: %d my nof_invites is: %d\n", mySelf->matricola,
    mySelf->voto_AdE, mySelf->nof_elems, mySelf->max_reject, mySelf->nof_invites);
 
-   shmctl(m_id, IPC_RMID, NULL);
+   //shmctl(m_id, IPC_RMID, NULL);
     return 0;
+}
+int randomValue(int seed, int lower_bound, int upper_bound) {
+    srand(time(NULL) - seed * 2);
+    int r = rand() % (upper_bound - lower_bound + 1) + lower_bound;
+    return r;
 }
