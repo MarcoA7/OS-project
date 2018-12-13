@@ -20,11 +20,11 @@
 
 void handle(int signum);
 pid_t child_pid[POP_SIZE], pid;
-
+int j;
 int main(int argc, char const *argv[])
 {
             signal(SIGALRM, handle);
-    for(int j = 0; j < POP_SIZE; j++)
+    for(j = 0; j < POP_SIZE; j++)
     switch( pid = fork()) {
         case 0:
             for(int i = 0; 1; i++) {
@@ -34,15 +34,17 @@ int main(int argc, char const *argv[])
             break;
         default:
             child_pid[j] = pid;
+            setpgid(child_pid[j], child_pid[0]);
         break;
     }
-    int status;
     alarm(5);
-    wait(&status);
-    printf("%d\n", status);
+    int corpse;
+    int status;
+    while ((corpse = wait(&status)) > 0)
+    printf("%d: child %d exited with status %d\n", (int)getpid(), corpse, status);
     printf("everyone died.\n");
     return 0;
 }
 void handle(int signum) {
-    kill(-1, SIGINT);
+    kill(-child_pid[0], SIGINT);
 }

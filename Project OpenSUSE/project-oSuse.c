@@ -72,6 +72,7 @@ struct msg_s {
     struct student whoAmI; 
 } message;
 
+pid_t all_student[POP_SIZE]; /* array of all students */
 int randomValue(int seed, int lower_bound, int upper_bound);
 void sim_alarm_handler(int signum);
 
@@ -80,7 +81,7 @@ int main(int argc, char const *argv[])
     SET_UP_SYNC_MECH; /* Setting up sync mechanism */
     sem_t *mutex;/* POSIX semaphore */
     int sum; /* the sum of all students */
-    pid_t *all_student, student_id;
+    pid_t student_id;
     FILE* config; /* config file */
     struct student* mySelf; /* how is caratterzed a student */
     int m_id; /* shared memory identifier */
@@ -117,7 +118,7 @@ int main(int argc, char const *argv[])
     for(int i = 0; i < 3; i++)
             printf("%.0f %.0f\n", publicBoard->data[i][0], publicBoard->data[i][1]);
 
-    all_student = malloc( POP_SIZE * sizeof(all_student));
+    //all_student = malloc( POP_SIZE * sizeof(all_student));
     
     /* Introduction */
     for(int i = 0; i < POP_SIZE; i++) {
@@ -166,12 +167,13 @@ int main(int argc, char const *argv[])
                 break;
             default:
                 /* teacher init*/
-                /* starting the timer */
                 all_student[i] = student_id;
+                /* It will place all the students in the same process group (of the first student) */
+                setpgid(all_student[i], all_student[0]); 
                 break;
         }
     }
-    READY_SET_GO;
+    //READY_SET_GO;
     alarm(SIM_TIME);
     int corpse;
     int status;
@@ -191,5 +193,6 @@ int randomValue(int seed, int lower_bound, int upper_bound) {
 }
 
 void sim_alarm_handler(int signum) {
-  kill(0, SIGINT);
-  }
+    /* it will terminate all the process in the same group as the first student */
+  kill(-all_student[0], SIGINT);
+}
