@@ -19,6 +19,22 @@
 #include <sys/mman.h>
 #include <sys/msg.h>
 
+#define WAITING_EVERYONE close(first_pipe[0]);\
+                close(first_pipe[1]);\
+                close(second_pipe[1]);\
+                read(second_pipe[0], &c, 1);\
+                close(second_pipe[0])\
+
+#define READY_SET_GO close(first_pipe[1]);\
+    read(first_pipe[0], &c, 1);\
+    close(second_pipe[0]);\
+    close(second_pipe[1])
+
+#define SET_UP_SYNC_MECH char c = 0;\
+    int first_pipe[2], second_pipe[2];\
+    pipe(first_pipe);\
+    pipe(second_pipe)
+
 #define MAT_START 0
 #define MAT_END 900000
 
@@ -57,10 +73,11 @@ struct msg_s {
 } message;
 
 int randomValue(int seed, int lower_bound, int upper_bound);
-void handler(int signum);
+void sim_alarm_handler(int signum);
 
 int main(int argc, char const *argv[])
 {   
+    SET_UP_SYNC_MECH; /* Setting up sync mechanism */
     sem_t *mutex;/* POSIX semaphore */
     int sum; /* the sum of all students */
     pid_t *all_student, student_id;
@@ -69,7 +86,10 @@ int main(int argc, char const *argv[])
     int m_id; /* shared memory identifier */
     MatrixF publicBoard; /* a public board where everyove can put everything */
     
-    /* initialization od the semaphore */
+    /* changing the default
+    * alarm signal handler */
+    signal(SIGALRM, sim_alarm_handler);
+    /* initialization of the semaphore */
     /* opening a shared semphore with a common name */
     mutex = sem_open("/nof_elem", O_CREAT,  0644, 1); /* a semaphore for a shared variable */
 
@@ -134,22 +154,29 @@ int main(int argc, char const *argv[])
                         mySelf->nof_elems = publicBoard->data[2][0];
                         publicBoard->data[2][1]--;
                     }
+                    publicBoard->data[i][2] = mySelf->matricola;
+                    publicBoard->data[i][3] = mySelf->nof_elems;
                 #endif
                 //the semaphore turn green.
                 sem_post(mutex);
                 
                 printf("%d %d %d %d %d i'm from %d\n", mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
+                WAITING_EVERYONE;
                 exit(0);
                 break;
             default:
                 /* teacher init*/
                 /* starting the timer */
-                wait(NULL);
                 all_student[i] = student_id;
-                printf("I'm the father of %d and I'm %d\n", all_student[i], getpid());
                 break;
         }
     }
+    READY_SET_GO;
+    alarm(SIM_TIME);
+    int corpse;
+    int status;
+    while ((corpse = wait(&status)) > 0)
+    printf("%d: child %d exited with status %d\n", (int)getpid(), corpse, status);
     /* closing and unlink the semaphores */
     sem_close(mutex);
     sem_unlink("/nof_elem");
@@ -163,5 +190,6 @@ int randomValue(int seed, int lower_bound, int upper_bound) {
     return r;
 }
 
-void handler(int signum) {
-  /*signal (SIGUSR1, handler)*/;}
+void sim_alarm_handler(int signum) {
+  kill(0, SIGINT);
+  }
