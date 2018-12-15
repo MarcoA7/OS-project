@@ -160,8 +160,6 @@ int main(int argc, char const *argv[])
     }
     */
    //shmctl(m_id, IPC_RMID, NULL);
-   printf("my mat is %d my grade is: %d my nof_ele is: %d my max ref is: %d my nof_invites is: %d\n", mySelf->matricola,
-   mySelf->voto_AdE, mySelf->nof_elems, mySelf->max_reject, mySelf->nof_invites);
 
    //shmctl(m_id, IPC_RMID, NULL);
     return 0;
