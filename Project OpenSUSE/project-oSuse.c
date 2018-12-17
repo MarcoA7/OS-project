@@ -19,6 +19,22 @@
 #include <sys/mman.h>
 #include <sys/msg.h>
 
+#define WAITING_EVERYONE close(first_pipe[0]);\
+                close(first_pipe[1]);\
+                close(second_pipe[1]);\
+                read(second_pipe[0], &c, 1);\
+                close(second_pipe[0])\
+
+#define READY_SET_GO close(first_pipe[1]);\
+    read(first_pipe[0], &c, 1);\
+    close(second_pipe[0]);\
+    close(second_pipe[1])
+
+#define SET_UP_SYNC_MECH char c = 0;\
+    int first_pipe[2], second_pipe[2];\
+    pipe(first_pipe);\
+    pipe(second_pipe)
+
 #define MAT_START 0
 #define MAT_END 900000
 
@@ -56,20 +72,25 @@ struct msg_s {
     struct student whoAmI; 
 } message;
 
+pid_t all_student[POP_SIZE]; /* array of all students */
 int randomValue(int seed, int lower_bound, int upper_bound);
-void handler(int signum);
+void sim_alarm_handler(int signum);
 
 int main(int argc, char const *argv[])
 {   
+    SET_UP_SYNC_MECH; /* Setting up sync mechanism */
     sem_t *mutex;/* POSIX semaphore */
     int sum; /* the sum of all students */
-    pid_t *all_student, student_id;
+    pid_t student_id;
     FILE* config; /* config file */
     struct student* mySelf; /* how is caratterzed a student */
     int m_id; /* shared memory identifier */
     MatrixF publicBoard; /* a public board where everyove can put everything */
     
-    /* initialization od the semaphore */
+    /* changing the default
+    * alarm signal handler */
+    signal(SIGALRM, sim_alarm_handler);
+    /* initialization of the semaphore */
     /* opening a shared semphore with a common name */
     mutex = sem_open("/nof_elem", O_CREAT,  0644, 1); /* a semaphore for a shared variable */
 
@@ -97,7 +118,7 @@ int main(int argc, char const *argv[])
     for(int i = 0; i < 3; i++)
             printf("%.0f %.0f\n", publicBoard->data[i][0], publicBoard->data[i][1]);
 
-    all_student = malloc( POP_SIZE * sizeof(all_student));
+    //all_student = malloc( POP_SIZE * sizeof(all_student));
     
     /* Introduction */
     for(int i = 0; i < POP_SIZE; i++) {
@@ -134,22 +155,30 @@ int main(int argc, char const *argv[])
                         mySelf->nof_elems = publicBoard->data[2][0];
                         publicBoard->data[2][1]--;
                     }
+                    publicBoard->data[i][2] = mySelf->matricola;
+                    publicBoard->data[i][3] = mySelf->nof_elems;
                 #endif
                 //the semaphore turn green.
                 sem_post(mutex);
                 
                 printf("%d %d %d %d %d i'm from %d\n", mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
+                WAITING_EVERYONE;
                 exit(0);
                 break;
             default:
                 /* teacher init*/
-                /* starting the timer */
-                wait(NULL);
                 all_student[i] = student_id;
-                printf("I'm the father of %d and I'm %d\n", all_student[i], getpid());
+                /* It will place all the students in the same process group (of the first student) */
+                setpgid(all_student[i], all_student[0]); 
                 break;
         }
     }
+    //READY_SET_GO;
+    alarm(SIM_TIME);
+    int corpse;
+    int status;
+    while ((corpse = wait(&status)) > 0)
+    printf("%d: child %d exited with status %d\n", (int)getpid(), corpse, status);
     /* closing and unlink the semaphores */
     sem_close(mutex);
     sem_unlink("/nof_elem");
@@ -163,5 +192,7 @@ int randomValue(int seed, int lower_bound, int upper_bound) {
     return r;
 }
 
-void handler(int signum) {
-  /*signal (SIGUSR1, handler)*/;}
+void sim_alarm_handler(int signum) {
+    /* it will terminate all the process in the same group as the first student */
+  kill(-all_student[0], SIGINT);
+}

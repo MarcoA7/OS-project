@@ -1,4 +1,4 @@
-#include "student.h"
+//#include "student.h"
 #include <stdio.h> 
 #include <unistd.h>
 #include <stdlib.h>
@@ -6,6 +6,7 @@
 #include <sys/msg.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 #define TEST(x) printf("riga %d\n",x);
 #define RIGA __LINE__
@@ -51,7 +52,6 @@ int main(int argc, char const *argv[])
         default:
             wait(NULL);
             key = childId;
-
             msgid = msgget(key, 0666 | IPC_CREAT);
             msgrcv(msgid, &message, sizeof(message), 1, 0);
             printf("Matricola is : %d and grade is %d \n",  message.whoAmI.matricola, message.whoAmI.voto_AdE);
