@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define INVITE 2
+#define ACCEPT 1
+#define REFUSE 3
 #define ROWS 100
 #define COLS 100
 #define POSIX(x) x
@@ -16,6 +19,7 @@
 #define READY_SET_GO close(p_pipe[1]);\
     read(p_pipe[0], &c, 1);\
     close(c_pipe[0]);\
+    alarm(SIM_TIME);\
     close(c_pipe[1])
 
 #define SET_UP_SYNC_MECH char c = 0;\

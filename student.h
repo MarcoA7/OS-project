@@ -10,6 +10,16 @@ struct student {
     int max_reject;
 };
 
+typedef struct grp {
+    struct student** array;
+    int closed;
+} grp;
+
+typedef grp* group;
+
+int isGroupEmpty(group theGroup);
+int isGroupFull(group theGroup, int length);
+
 
 
 #endif

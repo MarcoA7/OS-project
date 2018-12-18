@@ -1,14 +1,17 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <math.h>
 #include <semaphore.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/msg.h>
+#include <string.h>
 #include "student.h"
 #include "utility.h"
 
@@ -25,13 +28,15 @@
 #define SIM_TIME 3
 #endif
 sem_t *mutex;
+pid_t *all_student;
 
 struct msg_s { 
     long type; 
-    struct student whoAmI; 
+    struct student* whoAmI; 
 } message; 
 
 int randomValue(int seed, int lower_bound, int upper_bound);
+void sim_alarm_handler(int signum);
 
 int main(int argc, char const *argv[])
 {
@@ -39,9 +44,13 @@ int main(int argc, char const *argv[])
     int status;
     int sum; //total of all students
     int msgid;
-    pid_t *all_student, student_id;
+    pid_t student_id;
     FILE* config;
     struct student* mySelf;
+    group myGroup;
+
+    //allocating memory for the group;
+    myGroup = malloc(sizeof(myGroup));
     
     //initialization of the semaphore
     mutex = sem_open("accessing the board", O_CREAT, 0644, 1);
@@ -49,6 +58,10 @@ int main(int argc, char const *argv[])
 
     // it has to become a shared variable
     MatrixF publicBoard;
+
+    /* changing the default
+    * alarm signal handler */
+    signal(SIGALRM, sim_alarm_handler);
 
     #if POSIX(1)
     int shm_fd;
@@ -102,7 +115,7 @@ int main(int argc, char const *argv[])
             case 0:
                     /* student init */
                 mySelf = malloc(sizeof(*mySelf));
-                mySelf->matricola = randomValue(i, 0, 900000);
+                mySelf->matricola = randomValue(i, 11111, 900000);
                 mySelf->voto_AdE = randomValue(i, 18, 30);
                 mySelf->nof_invites = publicBoard->data[POS_NOF_INVITES][0];
                 mySelf->max_reject = publicBoard->data[POS_MAX_REJECTS][0];
@@ -121,16 +134,64 @@ int main(int argc, char const *argv[])
                         mySelf->nof_elems = publicBoard->data[2][0];
                         publicBoard->data[2][1]--;
                     }
+                    publicBoard->data[i][2] = mySelf->matricola;
+                    publicBoard->data[i][3] = mySelf->nof_elems;
                 //the semaphore turn green.
                 sem_post(mutex);
 
+                /* setting up an empty group */
+                myGroup->array = malloc(mySelf->nof_elems * sizeof(*mySelf));
+                //mySelf->myGroup = malloc(mySelf->nof_elems * (sizeof(int)));
+                memset(myGroup->array, 0, mySelf->nof_elems * (sizeof(*mySelf)));
+
                 fprintf(stderr, "ready %d grades are %d max invites are: %d max rejects are: %d my team will have: %d people. My teacher is %d\n",mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
                 WAITING_EVERYONE;
+                /* I'm the first member of the group */
+                myGroup->array[0] = mySelf;
+                while(1) {
+                    /* open or create the message queue
+                    * as the key for the queue we will use the matricola
+                    */
+                    /* MAndo nof_invites partendo dalla mia posizione nell'elenco degli
+                    * alunni, tenendo conto se sono pari o dispari
+                    * es: io sono il numero 2 mnado dal numero 3 al (3+nof_invites) % POP_SIZE
+                    * evitando di invitare me stessov*/
+                    msgid = msgget(mySelf->matricola, IPC_CREAT);
+                    /* busy waiting until someone writes me */ 
+                    while(msgrcv(msgid, &message, sizeof(message), INVITE, 0) == -1 && errno == EAGAIN);
+                    /* the first one to "message me"
+                    * will be accepted since I don't want to score zero
+                    */
+                    sem_wait(mutex);
+                    if(isGroupEmpty(myGroup)) {
+                        myGroup->array[1] = message.whoAmI;
+                        //mySelf->myGroup[0] = message.whoAmI.matricola; 
+                        msgid = msgget(message.whoAmI->matricola, IPC_CREAT);
+                        message.whoAmI->matricola = mySelf->matricola;
+                        message.type = ACCEPT;
+                        msgsnd(msgid, &message, sizeof(message), 0);
+                    }
+                    else if(isGroupFull(myGroup, mySelf->nof_elems)) {
+                        myGroup->closed = 1;
+                        msgid = msgget(mySelf->matricola, IPC_CREAT);
+                        msgctl(msgid, IPC_RMID, NULL);
+                        exit(0); 
+                    }
+                    else {
+
+                    }
+                        
+                    sem_post(mutex);
+
+                }
+
                 exit(0);
                 break;
             default:
                 /* teacher init*/
                 all_student[i] = student_id;
+                /* It will place all the students in the same process group (of the first student) */
+                setpgid(all_student[i], all_student[0]); 
                 break;
         }
     }
@@ -139,7 +200,7 @@ int main(int argc, char const *argv[])
     /* OK everyone is ready time is starting... NOW */
     /* Start simulation */
     printf("Start looking for collegues\n");
-    alarm(SIM_TIME);
+    //alarm(SIM_TIME); // da chiedere
     int corpse;
     //int status;
     while ((corpse = wait(&status)) > 0)
@@ -168,4 +229,9 @@ int randomValue(int seed, int lower_bound, int upper_bound) {
     srand(time(NULL) - seed * 2);
     int r = rand() % (upper_bound - lower_bound + 1) + lower_bound;
     return r;
+}
+
+void sim_alarm_handler(int signum) {
+    /* it will terminate all the process in the same group as the first student */
+  kill(-all_student[0], SIGINT);
 }
