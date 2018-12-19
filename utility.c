@@ -12,3 +12,13 @@ int randomEvenValue(int lower_bound, int upper_bound) {
     if(r % 2) return r;
     else return randomEvenValue(lower_bound, upper_bound);
 }*/
+int find(int data, int* array, int length) {
+    for(int i = 0; i < length; i++)
+        if (array[i] == data) return i;
+
+    return -1;
+}
+
+int concatenate(int a, int b) {
+    return a * pow(10, ceil(log10(b))) + b;
+}

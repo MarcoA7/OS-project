@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 
 #define INVITE 2
 #define ACCEPT 1
@@ -38,7 +39,8 @@ typedef struct mati {
 } mati;
 
 typedef mati* MatrixI;
-
+int find(int data, int* array, int length);
+int concatenate(int a, int b);
 //int randomValue(int lower_bound, int upper_bound);
 //int randomEvenValue(int lower_bound, int upper_bound);
 #endif

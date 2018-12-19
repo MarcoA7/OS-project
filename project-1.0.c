@@ -43,11 +43,13 @@ int main(int argc, char const *argv[])
     SET_UP_SYNC_MECH;
     int status;
     int sum; //total of all students
-    int msgid;
+    int elem = 0; //to identify how many students I have if my group
+    int my_msgid, friend_id;
     pid_t student_id;
     FILE* config;
     struct student* mySelf;
-    group myGroup;
+    group myGroup; //the group of the project
+    int student_list[POP_SIZE - 1]; //list of all student except me
 
     //allocating memory for the group;
     myGroup = malloc(sizeof(myGroup));
@@ -138,7 +140,12 @@ int main(int argc, char const *argv[])
                     publicBoard->data[i][3] = mySelf->nof_elems;
                 //the semaphore turn green.
                 sem_post(mutex);
-
+                /* getting a private copy of the list of all students */
+                for(int student_number = 0, k = 0; student_number < POP_SIZE; student_number++)
+                    if(publicBoard->data[student_number][2] != mySelf->matricola) {
+                        student_list[k] = publicBoard->data[student_number][2];
+                        k++;
+                    }
                 /* setting up an empty group */
                 myGroup->array = malloc(mySelf->nof_elems * sizeof(*mySelf));
                 //mySelf->myGroup = malloc(mySelf->nof_elems * (sizeof(int)));
@@ -146,46 +153,61 @@ int main(int argc, char const *argv[])
 
                 fprintf(stderr, "ready %d grades are %d max invites are: %d max rejects are: %d my team will have: %d people. My teacher is %d\n",mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
                 WAITING_EVERYONE;
-                /* I'm the first member of the group */
-                myGroup->array[0] = mySelf;
                 while(1) {
-                    /* open or create the message queue
-                    * as the key for the queue we will use the matricola
-                    */
-                    /* MAndo nof_invites partendo dalla mia posizione nell'elenco degli
-                    * alunni, tenendo conto se sono pari o dispari
-                    * es: io sono il numero 2 mnado dal numero 3 al (3+nof_invites) % POP_SIZE
-                    * evitando di invitare me stessov*/
-                    msgid = msgget(mySelf->matricola, IPC_CREAT);
-                    /* busy waiting until someone writes me */ 
-                    while(msgrcv(msgid, &message, sizeof(message), INVITE, 0) == -1 && errno == EAGAIN);
-                    /* the first one to "message me"
-                    * will be accepted since I don't want to score zero
-                    */
-                    sem_wait(mutex);
-                    if(isGroupEmpty(myGroup)) {
-                        myGroup->array[1] = message.whoAmI;
-                        //mySelf->myGroup[0] = message.whoAmI.matricola; 
-                        msgid = msgget(message.whoAmI->matricola, IPC_CREAT);
-                        message.whoAmI->matricola = mySelf->matricola;
-                        message.type = ACCEPT;
-                        msgsnd(msgid, &message, sizeof(message), 0);
+                    /* check if someone wrote me */
+                    my_msgid = msgget(mySelf->matricola, IPC_CREAT);
+                    /* need to sort the private student list, per grade
+                    * then i send the invites to each student better than me
+                    */ 
+                    for(int j = 0; j < mySelf->nof_invites; j++) {
+                        /* if I haven't received an invite yet, I send one */
+                        if(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) == -1 && (errno == EAGAIN || errno == ENOMSG)) {
+                            /* I only invite who's in my same turn 
+                            * need to make changes below I don't want to invite those who is not in my group
+                            */
+                            if(student_list[j] % 2 == mySelf->matricola % 2) {
+                            friend_id = msgget(student_list[j], IPC_CREAT);
+                            message.type = INVITE;
+                            message.whoAmI = mySelf;
+                            msgsnd(friend_id, &message, sizeof(message), 0);
+                            }
+                        }
+                        else if (errno != EAGAIN || errno != ENOMSG) {
+                            fprintf(stderr, "problem with the queue, bye bye\n");
+                            exit(EXIT_FAILURE);
+                        }
+                        else { 
+                            /* accepting all invites I get */ 
+                            msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT);
+                            friend_id = msgget(message.whoAmI->matricola, IPC_CREAT);
+                            if(elem < mySelf->nof_elems) {
+                                myGroup->array[elem] = message.whoAmI;
+                                elem++;
+                                message.type = ACCEPT;
+                                message.whoAmI = mySelf;
+                                msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
+                            }
+                            else {
+                                myGroup->closed = 1;
+                                message.type = REFUSE;
+                                message.whoAmI = mySelf;
+                                msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
+                            }
+                        }
                     }
-                    else if(isGroupFull(myGroup, mySelf->nof_elems)) {
-                        myGroup->closed = 1;
-                        msgid = msgget(mySelf->matricola, IPC_CREAT);
-                        msgctl(msgid, IPC_RMID, NULL);
-                        exit(0); 
+                    /* reoving from the queue all the refuse */
+                    while(msgrcv(my_msgid, &message, sizeof(message), REFUSE, IPC_NOWAIT) != -1 && (errno != EAGAIN || errno != ENOMSG));
+                    /* acceptiing all the invites for the remaining time ( minus 1 sec ) */
+                    while(mySelf->nof_elems > elem) {
+                        msgrcv(my_msgid, &message, sizeof(message), ACCEPT, 0);
+                        myGroup->array[elem] = message.whoAmI;
+                        elem++;
                     }
-                    else {
-
-                    }
-                        
-                    sem_post(mutex);
+                    myGroup->closed = 1;
 
                 }
-
-                exit(0);
+                /* exiting with the grade of the group and whetere the group is closed or not */
+                exit(concatenate(myGroup->closed, max_grade(myGroup, mySelf->nof_elems)));
                 break;
             default:
                 /* teacher init*/
