@@ -37,7 +37,6 @@ int main(int argc, char const *argv[])
     int result;
     pid_t childId;
     key_t key;
-    //message.whoAmI = malloc(sizeof(*message.whoAmI));
     #if 1
     switch(childId = fork()) {
         case 0:
