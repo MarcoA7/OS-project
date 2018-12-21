@@ -8,6 +8,9 @@
 #include <sys/wait.h>
 #include <errno.h>
 
+#define MATRICOLA 0
+#define VOTO_ADE 1
+
 #define TEST(x) printf("riga %d\n",x);
 #define RIGA __LINE__
 #if 0
@@ -20,10 +23,10 @@ struct student {
     int matricola;
     int voto_AdE;
 };
-struct msg {
+struct msg_ {
     long type;
-    struct student whoAmI;
-} message;
+    int whoAmI[1][2];
+};
 #else
 struct mesg_buffer { 
     long mesg_type; 
@@ -37,23 +40,26 @@ int main(int argc, char const *argv[])
     int result;
     pid_t childId;
     key_t key;
+    struct msg_ message;
     #if 1
     switch(childId = fork()) {
         case 0:
             key= getpid();
             msgid = msgget(key, 0666 | IPC_CREAT);
-            message.whoAmI.matricola = 777;
-            message.whoAmI.voto_AdE = 19;
+            printf("%d\n", errno);
+            message.whoAmI[0][MATRICOLA] = 777;
+            message.whoAmI[0][VOTO_ADE] = 19;
             message.type = 1;
             msgsnd(msgid, &message, sizeof(message), 0);
-            printf("child is sending %d and %d\n", message.whoAmI.matricola, message.whoAmI.voto_AdE);
+            printf("OK %d %d\n", errno, msgid);
+            fprintf(stderr, "child is sending %d and %d\n", message.whoAmI[0][MATRICOLA], message.whoAmI[0][VOTO_ADE]);
             exit(0);
         default:
             wait(NULL);
             key = childId;
             msgid = msgget(key, 0666 | IPC_CREAT);
             msgrcv(msgid, &message, sizeof(message), 1, 0);
-            printf("Matricola is : %d and grade is %d \n",  message.whoAmI.matricola, message.whoAmI.voto_AdE);
+            printf("Matricola is : %d and grade is %d \n",  message.whoAmI[0][MATRICOLA], message.whoAmI[0][VOTO_ADE]);
             msgctl(msgid, IPC_RMID, NULL); 
             break;
 
@@ -85,5 +91,6 @@ int main(int argc, char const *argv[])
     }
     
     #endif
+            msgctl(msgid, IPC_RMID, NULL); 
     return 0;
 }

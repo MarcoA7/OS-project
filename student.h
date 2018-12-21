@@ -1,5 +1,12 @@
 #ifndef _STUDENT_H_
 #define _STUDENT_H_
+#define MATRICOLA 0
+#define VOTO_ADE 1
+#define NOF_ELEMS 2
+#define NOF_INVITES 3
+#define MAX_REJECT 4
+
+#define STUDENT_FIELDS 5
 
 
 struct student {

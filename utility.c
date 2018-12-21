@@ -18,6 +18,12 @@ int find(int data, int* array, int length) {
 
     return -1;
 }
+int findInMatrix(int data, int** array, int length, int position) {
+    for(int i = 0; i < length; i++)
+        if (array[i][position] == data) return i;
+
+    return -1;
+}
 
 int concatenate(int a, int b) {
     return a * pow(10, ceil(log10(b))) + b;

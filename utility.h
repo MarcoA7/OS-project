@@ -28,6 +28,18 @@
     pipe(p_pipe);\
     pipe(c_pipe)
 
+#define SETUP_MESSAGE       message.whoAmI[0][MATRICOLA] = mySelf->matricola;\
+                            message.whoAmI[0][VOTO_ADE] = mySelf->voto_AdE;\
+                            message.whoAmI[0][NOF_ELEMS] = mySelf->nof_elems;\
+                            message.whoAmI[0][NOF_INVITES] = mySelf->nof_invites;\
+                            message.whoAmI[0][MAX_REJECT] = mySelf->max_reject
+
+#define ADD_TO_GROUP(elem)   myGroup->array[elem]->matricola = message.whoAmI[0][MATRICOLA];\
+                            myGroup->array[elem]->voto_AdE = message.whoAmI[0][VOTO_ADE];\
+                            myGroup->array[elem]->nof_elems = message.whoAmI[0][NOF_ELEMS];\
+                            myGroup->array[elem]->nof_invites = message.whoAmI[0][NOF_INVITES];\
+                            myGroup->array[elem]->max_reject = message.whoAmI[0][MAX_REJECT]
+
 typedef struct matf {
 	float data[ROWS][COLS];
 } matf;
@@ -40,6 +52,7 @@ typedef struct mati {
 
 typedef mati* MatrixI;
 int find(int data, int* array, int length);
+int findInMatrix(int data, int** array, int length, int position);
 int concatenate(int a, int b);
 //int randomValue(int lower_bound, int upper_bound);
 //int randomEvenValue(int lower_bound, int upper_bound);
