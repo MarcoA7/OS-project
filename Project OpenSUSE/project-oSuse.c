@@ -174,7 +174,7 @@ int main(int argc, char const *argv[])
                 firend = malloc(sizeof(*firend));
                 /*setting a random value for the matricola
                 * since the time is the seed we need to scramble a bit more */
-                mySelf->matricola = randomValue(i, 0, 900000);
+                mySelf->matricola = randomValue(i, 100000, 900000);
                 mySelf->voto_AdE = randomValue(i, 18, 30);
                 mySelf->nof_invites = publicBoard->data[POS_NOF_INVITES][0];
                 mySelf->max_reject = publicBoard->data[POS_MAX_REJECTS][0];
@@ -210,15 +210,21 @@ int main(int argc, char const *argv[])
                 /* setting up an empty group */
                 myGroup->array = malloc(mySelf->nof_elems * sizeof(*mySelf));
                 //mySelf->myGroup = malloc(mySelf->nof_elems * (sizeof(int)));
-                memset(myGroup->array, 0, mySelf->nof_elems * (sizeof(*mySelf)));
+                for(int i = 0; i < mySelf->nof_elems-1; i++)
+                    myGroup->array[i] = malloc(sizeof(struct student));
+                
+                //memset(myGroup->array, 0, mySelf->nof_elems * (sizeof(*mySelf)));
                 myGroup->closed = 0;
+                
 
                 fprintf(stderr, "I'm %d ready %d grades are %d max invites are: %d max rejects are: %d my team will have: %d people. My teacher is %d\n", getpid(),mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
                 WAITING_EVERYONE;
                 /* getting a private copy of the list of all students */
                 for(int student_number = 0; student_number < POP_SIZE; student_number++) {
-                    student_list[student_number][0] = publicBoard->data[student_number][2];
-                    student_list[student_number][1] = publicBoard->data[student_number][3];
+                    if((int)(publicBoard->data)[student_number][2] % 2 == mySelf->matricola % 2) {
+                        student_list[student_number][0] = publicBoard->data[student_number][2];
+                        student_list[student_number][1] = publicBoard->data[student_number][3];
+                    }
                 }
                 /* bubble sort to sort the list by grade */
                 int temp[2];
@@ -238,60 +244,75 @@ int main(int argc, char const *argv[])
                 myPosition = findInMatrix(mySelf->matricola, student_list, POP_SIZE, 0);
                 /* check if someone wrote me */
                 my_msgid = msgget(mySelf->matricola, 0666 | IPC_CREAT);
-                int test = 0;
+                int can_accept = 1;
                 for(int j = myPosition + 1, invite = 0; invite < mySelf->nof_invites && j < POP_SIZE; j++) {
-                    while((test = msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT)) != -1 && elem < mySelf->nof_elems) {
+                    if(can_accept && msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1 && elem < mySelf->nof_elems-1) {
+                        ADD_TO_GROUP(elem);
+                        elem++;
+                        message.type = ACCEPT;
+                        SETUP_MESSAGE;
+                        msgsnd(friend_id, &message, sizeof(message),IPC_NOWAIT);
+                        can_accept--;
+                    }/*
+                    while(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1) {
                         friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
-                        if(elem < mySelf->nof_elems) {
+                        if(elem < mySelf->nof_elems-1) {
                             ADD_TO_GROUP(elem);
                             elem++;
                             message.type = ACCEPT;
-                        fprintf(stderr,"accepting %d\n", message.whoAmI[0][MATRICOLA]);
+                        //fprintf(stderr,"accepting %d\n", message.whoAmI[0][MATRICOLA]);
                         }
                         else {
                             myGroup->closed = 1;
                             message.type = REFUSE;
-                        fprintf(stderr,"refusing %d\n", message.whoAmI[0][MATRICOLA]);
+                        //fprintf(stderr,"refusing %d\n", message.whoAmI[0][MATRICOLA]);
                         }
                         SETUP_MESSAGE;
                         msgsnd(friend_id, &message, sizeof(message),IPC_NOWAIT);
-                    }
-                    if(student_list[j][MATRICOLA] % 2 == mySelf->matricola % 2) {
-                        friend_id = msgget(student_list[j][MATRICOLA], 0666 | IPC_CREAT);
-                        message.type = INVITE;
-                        SETUP_MESSAGE;
-                        msgsnd(friend_id, &message, sizeof(message), 0);
-                        fprintf(stderr,"I'm %d inviting %d\n", mySelf->matricola, student_list[j][MATRICOLA]);
-                        invite++;
-                    }
-                    fprintf(stderr,"%d %d %d %d I'm %d\n", test, elem, mySelf->nof_elems, errno, mySelf->matricola);
+                    }*/
+                    fprintf(stderr,"%d\n", __LINE__);
+                    friend_id = msgget(student_list[j][MATRICOLA], 0666 | IPC_CREAT);
+                    message.type = INVITE;
+                    SETUP_MESSAGE;
+                    msgsnd(friend_id, &message, sizeof(message), 0);
+                    //fprintf(stderr,"I'm %d at position %d inviting %d\n", mySelf->matricola, myPosition, student_list[j][MATRICOLA]);
+                    invite++;
                 }
-                /* acceptiing all the invites for the remaining time ( minus 1 sec ) */
-                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1 && mySelf->nof_elems > elem) {
-                    fprintf(stderr,"I'm %d accepting %d\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
+                    fprintf(stderr,"%d\n", __LINE__);
+                WAITING_EVERYONE;
+                    fprintf(stderr,"%d\n", __LINE__);
+                while(/*elem < mySelf->nof_elems && */msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1) {
+                    //fprintf(stderr,"I'm %d adding %d to the group\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
                     ADD_TO_GROUP(elem);
                     elem++;
                 }
-                while(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1 && mySelf->nof_elems > elem) {
-                    fprintf(stderr,"I'm %d accepting %d\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
+                if(elem < mySelf->nof_elems) {
+                    msgrcv(my_msgid, &message, sizeof(message), INVITE, 0);
                     ADD_TO_GROUP(elem);
                     elem++;
                     friend_id = message.whoAmI[0][MATRICOLA];
                     message.type = ACCEPT;
                     SETUP_MESSAGE;
                     msgsnd(friend_id, &message, sizeof(message), 0);
-                }
-                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1 && mySelf->nof_elems > elem) {
-                    fprintf(stderr,"I'm %d accepting %d\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
+                } 
+                WAITING_EVERYONE;
+                    fprintf(stderr,"%d\n", __LINE__);
+                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, 0)) {
+                    //fprintf(stderr,"I'm %d adding %d to the group\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
                     ADD_TO_GROUP(elem);
                     elem++;
                 }
                 /* reoving from the queue all the refuse */
-                while(msgrcv(my_msgid, &message, sizeof(message), REFUSE, IPC_NOWAIT) != -1 && (errno != EAGAIN || errno != ENOMSG));
+                //while(msgrcv(my_msgid, &message, sizeof(message), REFUSE, IPC_NOWAIT) != -1 && (errno != EAGAIN || errno != ENOMSG));
                 myGroup->closed = 1;
                 msgctl(my_msgid, IPC_RMID, NULL); 
                 /* exiting with the grade of the group and whetere the group is closed or not */
-                fprintf(stderr, "%d\n",max_grade(myGroup, mySelf->nof_elems));
+                sem_wait(mutex);
+                fprintf(stderr, "I'm %d my grade is %d\n", mySelf->matricola, mySelf->voto_AdE);
+                for(int i = 0; i < mySelf->nof_elems-1; i++)
+                    fprintf(stderr, "mat %d grade %d\n",myGroup->array[i]->matricola, myGroup->array[i]->voto_AdE);
+                sem_post(mutex);
+                //fprintf(stderr, "%d\n",max_grade(myGroup, mySelf->nof_elems));
                 exit(EXIT_SUCCESS);
                 break;
             default:
@@ -303,6 +324,17 @@ int main(int argc, char const *argv[])
         }
     }
     READY_SET_GO;
+    close(first_pipe[1]);
+    read(first_pipe[0], &c, 1);
+    close(second_pipe[0]);
+    alarm(SIM_TIME);
+    close(second_pipe[1]);
+
+    close(first_pipe[1]);
+    read(first_pipe[0], &c, 1);
+    close(second_pipe[0]);
+    alarm(SIM_TIME);
+    close(second_pipe[1]);
     int corpse;
     int status;
     while ((corpse = wait(&status)) > 0)
