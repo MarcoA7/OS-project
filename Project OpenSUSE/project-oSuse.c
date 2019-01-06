@@ -245,48 +245,93 @@ int main(int argc, char const *argv[])
                 /* check if someone wrote me */
                 my_msgid = msgget(mySelf->matricola, 0666 | IPC_CREAT);
                 int can_accept = 1;
+                int got_invite;
+                int im_free = 1;
+                int can_decline = fmin(mySelf->max_reject, myPosition - 1);
+                sem_wait(mutex);
                 for(int j = myPosition + 1, invite = 0; invite < mySelf->nof_invites && j < POP_SIZE; j++) {
-                    if(can_accept && msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1 && elem < mySelf->nof_elems-1) {
+                    if(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1){
                         ADD_TO_GROUP(elem);
                         elem++;
+                        im_free--;
+                        break;
+                    }
+                    while((got_invite = msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT)) != -1  && can_decline){
+                        friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
+                        message.type = REFUSE;
+                        SETUP_MESSAGE;
+                        msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
+                        can_decline--;
+                    }
+                    if(got_invite != -1 && !can_decline) {
+                        ADD_TO_GROUP(elem);
+                        elem++;
+                        friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
                         message.type = ACCEPT;
                         SETUP_MESSAGE;
                         msgsnd(friend_id, &message, sizeof(message),IPC_NOWAIT);
                         can_accept--;
-                    }/*
-                    while(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1) {
-                        friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
-                        if(elem < mySelf->nof_elems-1) {
-                            ADD_TO_GROUP(elem);
-                            elem++;
-                            message.type = ACCEPT;
-                        //fprintf(stderr,"accepting %d\n", message.whoAmI[0][MATRICOLA]);
-                        }
-                        else {
-                            myGroup->closed = 1;
-                            message.type = REFUSE;
-                        //fprintf(stderr,"refusing %d\n", message.whoAmI[0][MATRICOLA]);
-                        }
-                        SETUP_MESSAGE;
-                        msgsnd(friend_id, &message, sizeof(message),IPC_NOWAIT);
-                    }*/
-                    fprintf(stderr,"%d\n", __LINE__);
+                        break;
+                    }
                     friend_id = msgget(student_list[j][MATRICOLA], 0666 | IPC_CREAT);
                     message.type = INVITE;
                     SETUP_MESSAGE;
                     msgsnd(friend_id, &message, sizeof(message), 0);
-                    //fprintf(stderr,"I'm %d at position %d inviting %d\n", mySelf->matricola, myPosition, student_list[j][MATRICOLA]);
-                    invite++;
+                        //fprintf(stderr,"I'm %d at position %d inviting %d\n", mySelf->matricola, myPosition, student_list[j][MATRICOLA]);
+                    invite++;                    
                 }
-                    fprintf(stderr,"%d\n", __LINE__);
+                sem_post(mutex);
                 WAITING_EVERYONE;
-                    fprintf(stderr,"%d\n", __LINE__);
-                while(/*elem < mySelf->nof_elems && */msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1) {
+                #if 1
+                if(!im_free) {
+                    while(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1) {
+                        friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
+                        message.type = REFUSE;
+                        SETUP_MESSAGE;
+                        msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
+                    }
+                }
+                else {
+                    
+                }
+                #else
+                got_invite = msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT);
+                if(can_accept)
+                    while(got_invite != -1 && can_decline) {
+                        friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
+                        message.type = REFUSE;
+                        SETUP_MESSAGE;
+                        msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
+                        can_decline--;
+                        got_invite = msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT);
+                    }
+                if(can_accept && got_invite != -1) {
+                    ADD_TO_GROUP(elem);
+                    elem++;
+                    friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
+                    message.type = ACCEPT;
+                    SETUP_MESSAGE;
+                    msgsnd(friend_id, &message, sizeof(message),IPC_NOWAIT);
+                    can_accept--;
+                }
+                while(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1) {
+                    friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
+                    message.type = REFUSE;
+                    SETUP_MESSAGE;
+                    msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
+                }
+                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1) {
+                    ADD_TO_GROUP(elem);
+                    elem++;
+                }
+                #endif
+                /*
+                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1) {
                     //fprintf(stderr,"I'm %d adding %d to the group\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
                     ADD_TO_GROUP(elem);
                     elem++;
                 }
-                if(elem < mySelf->nof_elems) {
+                if(elem < mySelf->nof_elems && can_accept) {
                     msgrcv(my_msgid, &message, sizeof(message), INVITE, 0);
                     ADD_TO_GROUP(elem);
                     elem++;
@@ -296,8 +341,7 @@ int main(int argc, char const *argv[])
                     msgsnd(friend_id, &message, sizeof(message), 0);
                 } 
                 WAITING_EVERYONE;
-                    fprintf(stderr,"%d\n", __LINE__);
-                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, 0)) {
+                while(msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1) {
                     //fprintf(stderr,"I'm %d adding %d to the group\n", mySelf->matricola, message.whoAmI[0][MATRICOLA]);
                     ADD_TO_GROUP(elem);
                     elem++;
@@ -330,11 +374,6 @@ int main(int argc, char const *argv[])
     alarm(SIM_TIME);
     close(second_pipe[1]);
 
-    close(first_pipe[1]);
-    read(first_pipe[0], &c, 1);
-    close(second_pipe[0]);
-    alarm(SIM_TIME);
-    close(second_pipe[1]);
     int corpse;
     int status;
     while ((corpse = wait(&status)) > 0)
