@@ -75,7 +75,7 @@
 #define COLS 100
 /* SHARED MEMORY */
 
-#define POP_SIZE 2
+#define POP_SIZE 6
 
 #define SIM_TIME 10
 
@@ -315,19 +315,18 @@ int main(int argc, char const *argv[])
                 /* exiting with the grade of the group and whetere the group is closed or not */
                 sem_wait(mutex);
                 if(elem > -1) {
-                    fprintf(stderr, "I'm %d my grade is %d\n", mySelf->matricola, mySelf->voto_AdE);
+                    fprintf(stderr, "I'm %d my grade is %d elem is: %d\n", mySelf->matricola, mySelf->voto_AdE, elem);
                 for(int i = 0; i < mySelf->nof_elems-1; i++)
                     fprintf(stderr, "mat %d grade %d\n",myGroup->array[i]->matricola, myGroup->array[i]->voto_AdE);
                 sem_post(mutex);
                 
                 }
-                fprintf(stderr, "im %d and turn_counter is %d\n", mySelf->matricola, turn_counter);
-                if(elem > 0) {
+                if(elem == 0 && turn_counter > 1) exit(-1);
+                else if(elem > 0) {
                     fprintf(stderr, "I'm %d and my group scored %d\n",mySelf->matricola, max_grade(myGroup, mySelf->voto_AdE, mySelf->nof_elems-1));
                     exit(max_grade(myGroup, mySelf->voto_AdE, mySelf->nof_elems-1));
                 }
-                else if(turn_counter > 1) exit(EXIT_SUCCESS);
-                else exit(3);
+                else if(turn_counter > 1) exit(mySelf->voto_AdE);
                 
                 
                 break;
@@ -349,8 +348,16 @@ int main(int argc, char const *argv[])
 
     int corpse;
     int status;
+    int score, group_counter = 0;
+    float mean = 0;
     while ((corpse = wait(&status)) > 0)
-    printf("%d: child %d exited with status %d\n", (int)getpid(), corpse, status);
+        if((score = WEXITSTATUS(status)) != 255 ){
+            mean += score; 
+            group_counter++;
+        }
+    mean /= group_counter;
+    printf("There was %d group and the mean is: %.2f\n", group_counter, mean);
+    //printf("%d: child %d exited with status %d\n", (int)getpid(), corpse, WEXITSTATUS(status));
     /* closing and unlink the semaphores */
     sem_close(mutex);
     sem_unlink("/nof_elem");
