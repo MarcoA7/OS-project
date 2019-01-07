@@ -42,6 +42,22 @@
     pipe(first_pipe);\
     pipe(second_pipe)
 
+#define POST_SENDING_MECH char p = 0;\
+    int first_pipe2[2], second_pipe2[2];\
+    pipe(first_pipe2);\
+    pipe(second_pipe2)
+
+#define EVERYONE_SENT_THEIR_MESSAGES close(first_pipe2[0]);\
+    close(first_pipe2[1]);\
+    close(second_pipe2[1]);\
+    read(second_pipe2[0], &p, 1);\
+    close(second_pipe2[0])
+
+#define MERGE close(first_pipe2[1]);\
+    read(first_pipe2[0], &p, 1);\
+    close(second_pipe2[0]);\
+    close(second_pipe2[1])
+
 #define ADD_TO_GROUP(elem)   myGroup->array[elem]->matricola = message.whoAmI[0][MATRICOLA];\
                             myGroup->array[elem]->voto_AdE = message.whoAmI[0][VOTO_ADE];\
                             myGroup->array[elem]->nof_elems = message.whoAmI[0][NOF_ELEMS];\
@@ -107,22 +123,19 @@ typedef struct grp {
 typedef grp* group;
 
 pid_t all_student[POP_SIZE]; /* array of all students */
-int randomValue(int seed, int lower_bound, int upper_bound);
-int findInMatrix(int data, int** array, int length, int position);
-int max_grade(group myGroup, int my_score, int size);
-void sim_alarm_handler(int signum);
-void reminder(int signum);
-int enough = 1;
+int randomValue(int seed, int lower_bound, int upper_bound); /* random value generator */
+int findInMatrix(int data, int** array, int length, int position); /* function to find in the list my position */
+int max_grade(group myGroup, int my_score, int size); /* function to find the max between my score and my team */
+void sim_alarm_handler(int signum); /* teacher alarm to make everyone stop doing everything */
+void reminder(int signum); /* friendly reminder that the time is running low */
+void do_nothing(int signum);
+int enough = 1; /* each student will have a timer set when it's time to speed up */
 
 int main(int argc, char const *argv[])
 {   
     SET_UP_SYNC_MECH; /* Setting up sync mechanism */
-    char p = 0;
-    int first_pipe2[2], second_pipe2[2];
-    pipe(first_pipe2);
-    pipe(second_pipe2);
-
-    int turn_counter = 0;
+    POST_SENDING_MECH; /* second sync mechanism for the sending sync */
+    int turn_counter = 0; /* A simple counter to know how many people are present in my turn */
     sem_t *mutex;/* POSIX semaphore */
     int sum; /* the sum of all students */
     int elem = 0; /* to identify the number of students in my group */
@@ -136,7 +149,12 @@ int main(int argc, char const *argv[])
     MatrixF publicBoard; /* a public board where everyove can put everything */
     int myPosition; /* where I'm placed in the list of all sutdent */
     int **student_list; /* list of all student */
+    int got_invite; /* did I get any invite? */
+    int im_free = 1; /* I'm in no group therefore I'm the leader of MY OWN group*/
+    int can_decline; /* A variable which holds the REAL number of max_rejects */
+    int score; /* group score */
 
+    /* allocating memory for the list */
     student_list = (int**)malloc(POP_SIZE * sizeof(int*));
     for(int i = 0; i < POP_SIZE; i++)
         student_list[i] = (int*) malloc(2 * sizeof(int));
@@ -195,13 +213,6 @@ int main(int argc, char const *argv[])
                 //the semaphore turns red.
                 /*decresing the number of elements is a critical action
                 * therefore I need a semaphore */
-                #if 0
-                for(int i = 0; i < NUMBER_OF_COMPOSITION; i++)
-                    if(publicBoard->data[i][1] > 0) {
-                        mySelf->nof_elems = publicBoard->data[i][0];
-                        publicBoard->data[i][1]--;
-                    }
-                #else
                     if(publicBoard->data[0][1] > 0) {
                         mySelf->nof_elems = publicBoard->data[0][0];
                         publicBoard->data[0][1]--;
@@ -215,24 +226,19 @@ int main(int argc, char const *argv[])
                         publicBoard->data[2][1]--;
                     }
                     publicBoard->data[i][2] = mySelf->matricola;
-                    //publicBoard->data[i][3] = mySelf->nof_elems;
                     publicBoard->data[i][3] = mySelf->voto_AdE;
-                #endif
                 //the semaphore turn green.
                 sem_post(mutex);
                 /* setting up an empty group */
                 myGroup->array = malloc(mySelf->nof_elems * sizeof(*mySelf));
-                //mySelf->myGroup = malloc(mySelf->nof_elems * (sizeof(int)));
                 for(int i = 0; i < mySelf->nof_elems-1; i++)
                     myGroup->array[i] = malloc(sizeof(struct student));
-                
-                //memset(myGroup->array, 0, mySelf->nof_elems * (sizeof(*mySelf)));
-                myGroup->closed = 0;
+                myGroup->closed = 0; /* the group is open */
                 
 
                 fprintf(stderr, "I'm %d ready %d grades are %d max invites are: %d max rejects are: %d my team will have: %d people. My teacher is %d\n", getpid(),mySelf->matricola, mySelf->voto_AdE, mySelf->nof_invites, mySelf->max_reject, mySelf->nof_elems, getppid());
                 WAITING_EVERYONE;
-                alarm(SIM_TIME/2);
+                alarm(SIM_TIME/2); /* Setting up a second alarm to be on time */
                 /* getting a private copy of the list of all students */
                 for(int student_number = 0; student_number < POP_SIZE; student_number++) {
                     if((int)(publicBoard->data)[student_number][2] % 2 == mySelf->matricola % 2) {
@@ -259,11 +265,8 @@ int main(int argc, char const *argv[])
                 myPosition = findInMatrix(mySelf->matricola, student_list, POP_SIZE, 0);
                 /* check if someone wrote me */
                 my_msgid = msgget(mySelf->matricola, 0666 | IPC_CREAT);
-                int can_accept = 1;
-                int got_invite;
-                int im_free = 1;
-                int can_decline = fmin(mySelf->max_reject, myPosition - 1);
-                sem_wait(mutex);
+                can_decline = fmin(mySelf->max_reject, myPosition - 1); /* it is the mininum number between max_rejects and how many student are below me */
+                sem_wait(mutex); /* One process at the time is able to send invite and texting back */
                 for(int j = myPosition + 1, invite = 0; invite < mySelf->nof_invites && j < POP_SIZE; j++) {
                     while((got_invite = msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT)) != -1  && can_decline){
                         friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
@@ -290,18 +293,18 @@ int main(int argc, char const *argv[])
                     invite++;                    
                 }
                 sem_post(mutex);
-                close(first_pipe2[0]);
-                close(first_pipe2[1]);
-                close(second_pipe2[1]);
-                read(second_pipe2[0], &p, 1);
-                close(second_pipe2[0]);
-                if(im_free) {
+                EVERYONE_SENT_THEIR_MESSAGES; /* everyone holds their position */
+                if(im_free) { 
+                    /* If I'm the leader of my group I accept all the invitation I receivED
+                    *  I will never get another invite
+                    * */
                     while(msgrcv(my_msgid, &message, sizeof(message), INVITE, IPC_NOWAIT) != -1 && elem < mySelf->nof_elems - 1){
                         friend_id = msgget(message.whoAmI[0][MATRICOLA], 0666 | IPC_CREAT);
                         message.type = ACCEPT;
                         SETUP_MESSAGE;
                         msgsnd(friend_id, &message, sizeof(message), IPC_NOWAIT);
                     }
+                    /* until there is space in my group and there is time add people who accepted */
                     while(enough && elem < mySelf->nof_elems - 1) {
                         if (msgrcv(my_msgid, &message, sizeof(message), ACCEPT, IPC_NOWAIT) != -1 && elem < mySelf->nof_elems - 1) {
                             ADD_TO_GROUP(elem);
@@ -309,23 +312,36 @@ int main(int argc, char const *argv[])
                         }
                     }    
                 }
+                /*this is a tecnical section
+                * the student has no power here but the SIGINT
+                * must be disabled to ensure everyone exit with their score
+                * */
+                signal(SIGINT, do_nothing); 
                 /* need to disable the main alarm handler */
                 myGroup->closed = 1;
                 msgctl(my_msgid, IPC_RMID, NULL); 
-                /* exiting with the grade of the group and whetere the group is closed or not */
-                sem_wait(mutex);
-                if(elem > -1) {
-                    fprintf(stderr, "I'm %d my grade is %d elem is: %d\n", mySelf->matricola, mySelf->voto_AdE, elem);
-                for(int i = 0; i < mySelf->nof_elems-1; i++)
-                    fprintf(stderr, "mat %d grade %d\n",myGroup->array[i]->matricola, myGroup->array[i]->voto_AdE);
+                sem_wait(mutex); /* One process at the time */
+                    if(elem > -1) {
+                        fprintf(stderr, "I'm %d my grade is %d elem is: %d\n", mySelf->matricola, mySelf->voto_AdE, elem);
+                    for(int i = 0; i < mySelf->nof_elems-1; i++)
+                        fprintf(stderr, "mat %d grade %d\n",myGroup->array[i]->matricola, myGroup->array[i]->voto_AdE);
                 sem_post(mutex);
                 
                 }
+                /* exiting with the grade of the group */
+
+                /* if I'm alone and I'm not alone in the turn 
+                *   my score won't be use for the mean since 
+                * I'm already in someone's else group */
                 if(elem == 0 && turn_counter > 1) exit(-1);
+
                 else if(elem > 0) {
-                    fprintf(stderr, "I'm %d and my group scored %d\n",mySelf->matricola, max_grade(myGroup, mySelf->voto_AdE, mySelf->nof_elems-1));
-                    exit(max_grade(myGroup, mySelf->voto_AdE, mySelf->nof_elems-1));
+                    /* if I reached my dream I won't get penalties */
+                    score = max_grade(myGroup, mySelf->voto_AdE, mySelf->nof_elems-1) + (elem == mySelf->nof_elems - 1 ? 0 : -3);
+                    fprintf(stderr, "I'm %d and my group scored %d\n",mySelf->matricola, score);
+                    exit(score);
                 }
+                /* If I'm alone in the turn my group is composed just by myself */
                 else if(turn_counter > 1) exit(mySelf->voto_AdE);
                 
                 
@@ -340,15 +356,11 @@ int main(int argc, char const *argv[])
     }
     READY_SET_GO;
 
-    
-    close(first_pipe2[1]);
-    read(first_pipe2[0], &p, 1);
-    close(second_pipe2[0]);
-    close(second_pipe2[1]);
+    MERGE;
 
     int corpse;
     int status;
-    int score, group_counter = 0;
+    int group_counter = 0;
     float mean = 0;
     while ((corpse = wait(&status)) > 0)
         if((score = WEXITSTATUS(status)) != 255 ){
@@ -361,6 +373,7 @@ int main(int argc, char const *argv[])
     /* closing and unlink the semaphores */
     sem_close(mutex);
     sem_unlink("/nof_elem");
+    shmctl(m_id, IPC_RMID, NULL);
     return 0;
 }
 
@@ -379,6 +392,7 @@ void reminder(int signum) {
     /* it will terminate all the process in the same group as the first student */
   enough = 0;
 }
+void do_nothing(int signum) {;}
 int findInMatrix(int data, int** array, int length, int position) {
     for(int i = 0; i < length; i++)
         if (array[i][position] == data) return i;
