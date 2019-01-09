@@ -28,6 +28,22 @@
     pipe(p_pipe);\
     pipe(c_pipe)
 
+#define POST_SENDING_MECH char p = 0;\
+    int first_pipe2[2], second_pipe2[2];\
+    pipe(first_pipe2);\
+    pipe(second_pipe2)
+
+#define EVERYONE_SENT_THEIR_MESSAGES close(first_pipe2[0]);\
+    close(first_pipe2[1]);\
+    close(second_pipe2[1]);\
+    read(second_pipe2[0], &p, 1);\
+    close(second_pipe2[0])
+
+#define MERGE close(first_pipe2[1]);\
+    read(first_pipe2[0], &p, 1);\
+    close(second_pipe2[0]);\
+    close(second_pipe2[1])
+
 #define SETUP_MESSAGE       message.whoAmI[0][MATRICOLA] = mySelf->matricola;\
                             message.whoAmI[0][VOTO_ADE] = mySelf->voto_AdE;\
                             message.whoAmI[0][NOF_ELEMS] = mySelf->nof_elems;\

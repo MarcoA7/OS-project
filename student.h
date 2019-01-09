@@ -26,7 +26,7 @@ typedef grp* group;
 
 int isGroupEmpty(group theGroup);
 int isGroupFull(group theGroup, int length);
-int max_grade(group myGroup, int size);
+int max_grade(group myGroup, int my_score, int size);
 
 
 

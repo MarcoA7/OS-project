@@ -9,8 +9,8 @@ int isGroupFull(group theGroup, int length) {
 }
 
 
-int max_grade(group myGroup, int size) {
-    int max = 0;
+int max_grade(group myGroup, int my_score, int size) {
+    int max = my_score;
     for(int i = 0; i < size; i++)
         if(max < myGroup->array[i]->voto_AdE) max = myGroup->array[i]->voto_AdE;
     return max;
